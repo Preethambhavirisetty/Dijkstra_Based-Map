@@ -1,15 +1,40 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
 
 const CHIPS = ["Distance", "Time", "Cost", "Hops"];
+const RouteMap = dynamic(() => import("./RouteMap"), { ssr: false });
 
-function buildPath(origin, destination, nodes) {
-  const middleNodes = Array.from(
-    { length: Math.max(0, nodes - 2) },
-    (_, index) => `N${index + 1}`
-  );
-  return [origin, ...middleNodes, destination];
+async function geocodePlace(query) {
+  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(
+    query
+  )}`;
+  const response = await fetch(url, {
+    headers: {
+      Accept: "application/json"
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Unable to geocode ${query}`);
+  }
+
+  const data = await response.json();
+  if (!Array.isArray(data) || !data.length) {
+    throw new Error(`No location found for ${query}`);
+  }
+
+  return {
+    lat: Number(data[0].lat),
+    lon: Number(data[0].lon),
+    label: data[0].display_name
+  };
+}
+
+function formatCalcTime(durationSeconds) {
+  const ms = Math.max(100, Math.round(durationSeconds * 1000));
+  return ms >= 1000 ? `${(ms / 1000).toFixed(2)} s` : `${ms} ms`;
 }
 
 export default function PathfinderCard() {
@@ -19,11 +44,18 @@ export default function PathfinderCard() {
   const [graphType, setGraphType] = useState("undirected");
   const [activeChip, setActiveChip] = useState("Distance");
   const [isError, setIsError] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
   const [result, setResult] = useState(null);
+  const [mapData, setMapData] = useState({
+    originPoint: null,
+    destinationPoint: null,
+    route: []
+  });
 
   const pathNodes = useMemo(() => {
     if (!result) return [];
-    return buildPath(result.origin, result.destination, result.nodes);
+    return [result.origin, result.destination];
   }, [result]);
 
   const handleSwap = () => {
@@ -31,27 +63,64 @@ export default function PathfinderCard() {
     setDestination(origin);
   };
 
-  const handleFindPath = () => {
+  const handleFindPath = async () => {
     const cleanOrigin = origin.trim();
     const cleanDestination = destination.trim();
 
     if (!cleanOrigin || !cleanDestination) {
       setIsError(true);
+      setErrorMessage("Please enter both source and destination.");
       setTimeout(() => setIsError(false), 400);
       return;
     }
 
-    const distance = (Math.random() * 40 + 5).toFixed(1);
-    const nodes = Math.floor(Math.random() * 6 + 3);
-    const calcTime = (Math.random() * 0.8 + 0.1).toFixed(2);
+    setIsLoading(true);
+    setErrorMessage("");
 
-    setResult({
-      origin: cleanOrigin,
-      destination: cleanDestination,
-      distance,
-      nodes,
-      calcTime
-    });
+    try {
+      const [originGeo, destinationGeo] = await Promise.all([
+        geocodePlace(cleanOrigin),
+        geocodePlace(cleanDestination)
+      ]);
+
+      const osrmUrl =
+        `https://router.project-osrm.org/route/v1/driving/` +
+        `${originGeo.lon},${originGeo.lat};${destinationGeo.lon},${destinationGeo.lat}` +
+        "?overview=full&geometries=geojson&steps=true";
+
+      const routeResponse = await fetch(osrmUrl);
+      if (!routeResponse.ok) {
+        throw new Error("Routing request failed.");
+      }
+
+      const routeData = await routeResponse.json();
+      const route = routeData?.routes?.[0];
+
+      if (!route?.geometry?.coordinates?.length) {
+        throw new Error("No route found between the selected locations.");
+      }
+
+      const mappedRoute = route.geometry.coordinates.map(([lon, lat]) => [lat, lon]);
+      const nodeCount = Math.max(2, (route.legs?.[0]?.steps?.length ?? 1) + 1);
+
+      setResult({
+        origin: cleanOrigin,
+        destination: cleanDestination,
+        distance: (route.distance / 1000).toFixed(1),
+        nodes: nodeCount,
+        calcTime: formatCalcTime(route.duration)
+      });
+
+      setMapData({
+        originPoint: [originGeo.lat, originGeo.lon],
+        destinationPoint: [destinationGeo.lat, destinationGeo.lon],
+        route: mappedRoute
+      });
+    } catch (error) {
+      setErrorMessage(error.message || "Failed to load map route.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -184,13 +253,16 @@ export default function PathfinderCard() {
         type="button"
         className={`btn-find${isError ? " shake" : ""}`}
         onClick={handleFindPath}
+        disabled={isLoading}
       >
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <circle cx="11" cy="11" r="8" />
           <path d="m21 21-4.35-4.35" />
         </svg>
-        Find Shortest Path
+        {isLoading ? "Finding Route..." : "Find Shortest Path"}
       </button>
+
+      {errorMessage ? <p className="error-text">{errorMessage}</p> : null}
 
       <div className={`result-panel${result ? " show" : ""}`}>
         <div className="result-row">
@@ -205,7 +277,7 @@ export default function PathfinderCard() {
           </div>
           <div className="result-sep" />
           <div className="result-metric">
-            <div className="val">{result ? `${result.calcTime} ms` : "—"}</div>
+            <div className="val">{result ? result.calcTime : "—"}</div>
             <div className="lbl">Calc Time</div>
           </div>
         </div>
@@ -217,6 +289,15 @@ export default function PathfinderCard() {
             </span>
           ))}
         </div>
+      </div>
+
+      <div className="map-panel">
+        <div className="map-title">Route Map</div>
+        <RouteMap
+          originPoint={mapData.originPoint}
+          destinationPoint={mapData.destinationPoint}
+          route={mapData.route}
+        />
       </div>
     </section>
   );

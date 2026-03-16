@@ -1,4 +1,5 @@
 import { PT_Sans } from "next/font/google";
+import "leaflet/dist/leaflet.css";
 import "./globals.css";
 
 const ptSans = PT_Sans({

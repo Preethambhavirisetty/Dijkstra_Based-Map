@@ -83,7 +83,7 @@ body {
   -webkit-backdrop-filter: var(--blur);
   border-radius: 28px;
   padding: 36px 28px 30px;
-  width: min(440px, 100%);
+  width: min(760px, 100%);
   position: relative;
   animation: cardIn 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
@@ -333,6 +333,11 @@ select {
   opacity: 0.92;
 }
 
+.btn-find:disabled {
+  cursor: not-allowed;
+  opacity: 0.8;
+}
+
 .btn-find.shake {
   animation: shake 0.4s ease;
 }
@@ -424,6 +429,40 @@ select {
   font-size: 12px;
 }
 
+.error-text {
+  margin: 12px 2px 0;
+  color: #ca3a3a;
+  font-size: 13px;
+}
+
+.map-panel {
+  margin-top: 18px;
+  background: rgba(255, 255, 255, 0.65);
+  border: 1.5px solid rgba(255, 255, 255, 0.8);
+  border-radius: 16px;
+  padding: 12px;
+}
+
+.map-title {
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  margin: 0 2px 10px;
+  font-weight: 700;
+}
+
+.map-shell {
+  overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid rgba(180, 190, 230, 0.4);
+}
+
+.map-canvas {
+  width: 100%;
+  height: 320px;
+}
+
 @keyframes shake {
   0%,
   100% {
@@ -462,6 +501,7 @@ select {
   .card {
     border-radius: 22px;
     padding: 22px 16px 18px;
+    width: min(520px, 100%);
   }
 
   .swap-btn {
@@ -471,5 +511,9 @@ select {
 
   .options-row {
     grid-template-columns: 1fr;
+  }
+
+  .map-canvas {
+    height: 240px;
   }
 }
